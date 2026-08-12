@@ -3,6 +3,8 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from voice import listen
+
 from memory import (
     initialize_memory,
     save_message,
@@ -41,16 +43,26 @@ Personality:
 - calm, intelligent, concise, friendly
 - proactive without being annoying
 - explain technical topics simply
-- never pretend an action was completed unless a tool actually completed it
-
-You may receive previous conversations stored in persistent memory.
-Use those previous conversations when they are relevant.
+- never pretend an action was completed unless a real tool actually completed it
 
 Current capabilities:
-- conversation
+- text conversation
+- voice input
 - persistent conversation memory
+- structured long-term memory
 
-Future versions will receive voice, computer tools, vision, and automation.
+Current limitations:
+- you cannot access local files yet
+- you cannot control the computer yet
+- you cannot browse or operate external systems unless a real tool is provided
+
+You may receive previous conversations and structured memories.
+Use them when relevant.
+
+Never say you have no persistent memory when persistent memory is available.
+Never claim to access files, applications, or devices unless a real tool actually performed that action.
+
+Future versions will receive file access, computer tools, vision, automation, and voice output.
 """.strip()
 
 
@@ -74,12 +86,14 @@ messages.extend(previous_messages)
 
 
 print("=" * 55)
-print("EV v0.3")
+print("EV v0.4")
 print("NVIDIA-powered personal AI assistant")
-print("Persistent Memory: ONLINE")
+print("Intelligent Memory: ONLINE")
+print("Voice Input: ONLINE")
 print()
 print("Commands:")
 print("  exit                              Close EV")
+print("  /voice                            Speak to EV")
 print("  /clear-chat                       Clear chat history")
 print("  /remember <category> <key> <value>")
 print("  /memories                         Show long-term memories")
@@ -91,6 +105,26 @@ print("=" * 55)
 while True:
     try:
         user_input = input("\nYou: ").strip()
+
+        # ------------------------------
+        # Voice input
+        # ------------------------------
+
+        if user_input.lower() == "/voice":
+            try:
+                spoken_text = listen()
+
+                if not spoken_text:
+                    print("\nEV: I couldn't understand what you said.")
+                    continue
+
+                user_input = spoken_text
+
+                print(f"\nYou (voice): {user_input}")
+
+            except Exception as exc:
+                print(f"\n[VOICE ERROR] {exc}")
+                continue
 
         if not user_input:
             continue
