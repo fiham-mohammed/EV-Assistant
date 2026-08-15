@@ -3,3 +3,4 @@
 __pycache__/
 *.pyc
 ev_memory.db
+data/
