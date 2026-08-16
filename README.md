@@ -1,12 +1,16 @@
-# EV Assistant — v0.7
+# EV Assistant — v0.8.0
 
 EV is a private personal AI assistant built in Python and powered by NVIDIA's hosted NIM API.
 
-The project started as a simple command-line chatbot and has grown into a voice-enabled, memory-aware assistant with safe local file access and approved Windows PC tools.
+The project started as a simple command-line chatbot and has grown into a memory-aware, voice-enabled assistant with safe local file access, controlled Windows PC tools, intelligent Notepad writing, and a validated multi-step task planning system.
 
-## Current Version
+---
 
-**EV v0.7 — Intelligent PC Tools**
+# Current Version
+
+## EV v0.8.0 — Safe Task Planner & Validated Executor
+
+EV v0.8 introduces a structured planning layer between natural-language requests and computer actions.
 
 Current capabilities include:
 
@@ -19,14 +23,20 @@ Current capabilities include:
 - Natural-language file understanding
 - Current local time and date tools
 - Approved application launching
-- Safe calculator automation
-- Notepad typing
+- Safe arithmetic calculator
+- Windows Calculator automation
+- Literal Notepad typing
 - AI-generated Notepad writing
-- Supported compound tool actions
+- Safe task-plan preview
+- Validated task execution
+- Supported multi-step actions
+- Strict planner action allowlist
+- Planner argument validation
+- Unsupported-action rejection
 
 ---
 
-## Requirements
+# Requirements
 
 - Windows
 - Python 3.12 recommended
@@ -38,14 +48,14 @@ EV's current PC automation tools are designed for Windows.
 
 ---
 
+# Installation
+
 ## 1. Clone the Repository
 
 ```powershell
 git clone https://github.com/fiham-mohammed/EV-Assistant.git
 cd EV-Assistant
 ```
-
----
 
 ## 2. Create a Virtual Environment
 
@@ -63,21 +73,17 @@ python -m venv .venv
 .venv\Scripts\activate
 ```
 
----
-
 ## 3. Install Dependencies
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
----
-
 ## 4. Configure NVIDIA NIM
 
 Copy `.env.example` and rename the copy to `.env`.
 
-Then add your NVIDIA API key:
+Add your NVIDIA API key:
 
 ```text
 NVIDIA_API_KEY=nvapi-your-key-here
@@ -91,18 +97,16 @@ NVIDIA_MODEL=openai/gpt-oss-20b
 
 Never commit your real `.env` file or API key to GitHub.
 
----
-
 ## 5. Run EV
 
 ```powershell
 python ev.py
 ```
 
-EV should start with a status screen similar to:
+A typical EV v0.8 startup screen includes:
 
 ```text
-EV v0.7
+EV v0.8
 NVIDIA-powered personal AI assistant
 Intelligent Memory: ONLINE
 Voice Input: ONLINE
@@ -112,6 +116,8 @@ Natural File Routing: ONLINE
 Approved PC Tools: ONLINE
 Safe Calculator: ONLINE
 Intelligent Notepad: ONLINE
+Safe Task Planner: PREVIEW ONLY
+Safe Plan Executor: ONLINE
 ```
 
 ---
@@ -122,57 +128,37 @@ Intelligent Notepad: ONLINE
 
 EV uses an NVIDIA-hosted language model through an OpenAI-compatible API.
 
-Example:
+## Persistent Memory
 
-```text
-You: Explain machine learning simply.
+EV stores recent conversation history in SQLite so previous conversations can be restored after restarting the application.
 
-EV: ...
-```
-
----
-
-## Persistent Conversation Memory
-
-EV stores recent conversation history in SQLite so previous conversations can be restored after restarting the program.
-
-Useful command:
+Clear conversation history:
 
 ```text
 /clear-chat
 ```
 
-This clears conversation history without deleting structured long-term memories.
-
----
-
 ## Structured Long-Term Memory
 
-EV can store important facts separately from normal conversation history.
-
-### Remember Something
+Remember something:
 
 ```text
 /remember identity name Fiham
 ```
 
-```text
-/remember project project_codename Orion
-```
-
-### View Memories
+View memories:
 
 ```text
 /memories
 ```
 
-### Forget One Memory
+Forget one memory:
 
 ```text
-/forget project project_codename
+/forget identity name
 ```
 
-### Clear Everything
+Clear everything:
 
 ```text
 /clear-all confirm
@@ -182,31 +168,11 @@ EV can store important facts separately from normal conversation history.
 
 # Voice System
 
-## Voice Input
-
-Use:
+Voice input:
 
 ```text
 /voice
 ```
-
-EV records microphone input and converts speech to text using Faster Whisper.
-
-Example:
-
-```text
-You: /voice
-
-[Voice] Listening...
-
-You (voice): What is my project codename?
-
-EV: ...
-```
-
----
-
-## Voice Output
 
 Enable spoken responses:
 
@@ -220,197 +186,114 @@ Disable spoken responses:
 /speak-off
 ```
 
-When enabled, EV can speak AI answers and supported tool results.
-
 ---
 
 # Safe File Access
 
-EV does not have unrestricted access to the whole computer.
+EV does not have unrestricted access to the computer's filesystem.
 
 Local file access is restricted to EV's approved `data/` directory.
 
-Supported file types currently include:
+Current supported file types:
 
 - `.txt`
 - `.md`
 
-## List Approved Files
+List approved files:
 
 ```text
 /files
 ```
 
-## Read a File
+Read a file:
 
 ```text
 /read test.txt
 ```
 
-With voice output enabled, EV can also read supported file contents aloud.
-
----
-
-## Natural-Language File Understanding
-
-EV can detect approved filenames in ordinary conversation and read the latest real file contents before answering.
-
-Examples:
+Natural-language examples:
 
 ```text
 What's inside test.txt?
-```
-
-```text
 Summarize test.txt
-```
-
-```text
 Explain test.txt
-```
-
-```text
 How many lines does test.txt contain?
 ```
 
-```text
-What email address is in test.txt?
-```
+Current file-tool results override older conversation claims about that file.
 
-This prevents EV from relying only on old conversation history when answering questions about a file.
+File contents are treated as data, not trusted system instructions.
 
 ---
 
 # Approved PC Tool System
 
-EV v0.7 includes a controlled tool system.
+EV uses a controlled tool architecture.
 
-The goal is to add useful computer actions without giving the AI unrestricted shell access.
+Current approved tools include:
 
-## Current Time
+- Current local time
+- Current local date
+- EV data-folder access
+- Notepad
+- Calculator
+- Safe arithmetic evaluation
+- Controlled Notepad typing
+
+Time:
 
 ```text
 /time
 ```
 
-or:
-
-```text
-EV, what time is it?
-```
-
-## Current Date
+Date:
 
 ```text
 /date
 ```
 
-or:
-
-```text
-What's today's date?
-```
-
-## Open EV Data Folder
+Open the approved data folder:
 
 ```text
 /open-data
 ```
 
-or:
-
-```text
-Open my data folder.
-```
-
----
-
-# Approved Applications
-
-The current application allowlist contains:
-
-- Notepad
-- Calculator
-
-Launch an approved application:
+Launch approved apps:
 
 ```text
 /open notepad
-```
-
-```text
 /open calculator
 ```
 
-Natural language also works:
-
-```text
-Open Notepad.
-```
-
-```text
-Open Calculator.
-```
-
 Applications outside the allowlist are rejected.
-
-Example:
-
-```text
-/open chrome
-```
-
-EV should refuse unless Chrome is intentionally added to the allowlist.
 
 ---
 
 # Safe Calculator
 
-EV includes a restricted arithmetic calculator instead of using unrestricted Python evaluation.
+EV uses a restricted AST-based arithmetic evaluator instead of unrestricted `eval()`.
 
-Example:
+Examples:
 
 ```text
 /calc 25*18
 ```
 
-Natural language:
-
-```text
-What is 25 * 18?
-```
-
-EV can also open Windows Calculator and enter the calculation:
-
 ```text
 Open Calculator and calculate 2+2
 ```
-
-EV can process supported compound requests in one turn.
 
 ---
 
 # Intelligent Notepad
 
-EV can interact with approved Windows Notepad.
-
-## Literal Typing
+Literal typing:
 
 ```text
 Open Notepad and type hello world
 ```
 
-EV opens Notepad and types exactly:
-
-```text
-hello world
-```
-
-## AI-Generated Writing
-
-EV can also generate content with the NVIDIA model and place the generated answer into Notepad.
-
-Examples:
+AI-generated writing:
 
 ```text
 Open Notepad and explain what is AI
@@ -420,29 +303,131 @@ Open Notepad and explain what is AI
 Open Notepad and write about machine learning
 ```
 
-```text
-Open Notepad and describe artificial intelligence
-```
-
-Flow:
-
-```text
-User request
-    ↓
-EV detects Notepad writing intent
-    ↓
-NVIDIA generates the requested content
-    ↓
-EV opens approved Notepad
-    ↓
-EV types the generated response
-```
-
 EV currently does not automatically save the Notepad document.
 
 ---
 
-# Commands
+# EV v0.8 Safe Task Planner
+
+Preview a plan:
+
+```text
+/plan <task>
+```
+
+Example:
+
+```text
+/plan Open Notepad and create a short AI study plan
+```
+
+Example output:
+
+```text
+EV Plan
+----------------------------------------
+Goal: Create a short AI study plan in Notepad
+1. generate_text -> {'prompt': 'Create a short practical AI study plan'}
+2. write_notepad -> {'source': 'generated_text'}
+```
+
+`/plan` is preview-only and does not execute the actions.
+
+---
+
+# Safe Plan Executor
+
+Execute a validated plan:
+
+```text
+/run-plan <task>
+```
+
+Example:
+
+```text
+/run-plan Open Notepad and create a short AI study plan
+```
+
+Execution flow:
+
+```text
+User request
+    ↓
+NVIDIA planner
+    ↓
+JSON parser
+    ↓
+Action allowlist validation
+    ↓
+Argument-schema validation
+    ↓
+Dependency validation
+    ↓
+Safe executor
+    ↓
+Approved Python tool functions
+```
+
+Example execution:
+
+```text
+EV Plan
+----------------------------------------
+Goal: Create a short AI study plan in Notepad
+1. generate_text -> {'prompt': 'Create a short practical AI study plan'}
+2. write_notepad -> {'source': 'generated_text'}
+
+EV Execution
+----------------------------------------
+1. generate_text: Generated the requested text.
+2. write_notepad: Opened Notepad and typed the requested text.
+```
+
+---
+
+# Planner Safety
+
+Current allowed planner actions:
+
+```text
+get_time
+get_date
+calculate
+open_app
+open_data_folder
+write_notepad
+generate_text
+```
+
+Unsupported requests produce an empty plan.
+
+Example:
+
+```text
+/run-plan Run a PowerShell command
+```
+
+Expected behavior:
+
+```text
+Goal: Unsupported request
+No approved actions available for this request.
+```
+
+Planner/debug output is display text only.
+
+For example:
+
+```text
+open_app -> {"app": "notepad"}
+```
+
+is not treated as an executable command.
+
+---
+
+# Available Commands
 
 ```text
 exit                              Close EV
@@ -461,6 +446,9 @@ exit                              Close EV
 /open-data                        Open EV data folder
 /open <app>                       Launch approved app
 
+/plan <task>                      Preview a safe task plan
+/run-plan <task>                  Execute a validated safe task plan
+
 /clear-chat                       Clear conversation history
 
 /remember <category> <key> <value>
@@ -474,8 +462,6 @@ exit                              Close EV
 
 # Project Structure
 
-A typical EV project directory looks like:
-
 ```text
 EV-Assistant/
 ├── data/
@@ -484,17 +470,41 @@ EV-Assistant/
 ├── .gitignore
 ├── README.md
 ├── ev.py
+├── executor.py
 ├── file_tools.py
 ├── memory.py
 ├── pc_tools.py
+├── planner.py
 ├── speech.py
 ├── voice.py
 └── requirements.txt
 ```
 
-`data/` is EV's approved local-file area.
+## Main Modules
 
-Keep private or personal files out of Git.
+### `ev.py`
+Main application loop, command routing, conversation handling, memory context, file context, and tool integration.
+
+### `planner.py`
+Creates and validates structured safe task plans.
+
+### `executor.py`
+Executes only validated approved planner actions.
+
+### `pc_tools.py`
+Contains approved Windows PC tools such as current time/date, approved app launching, safe calculator, Calculator UI interaction, and Notepad typing.
+
+### `file_tools.py`
+Restricts local file access to the approved EV `data/` folder.
+
+### `memory.py`
+SQLite-backed conversation and structured long-term memory.
+
+### `voice.py`
+Microphone recording and Faster Whisper speech-to-text.
+
+### `speech.py`
+Optional text-to-speech output.
 
 ---
 
@@ -502,57 +512,54 @@ Keep private or personal files out of Git.
 
 EV follows a controlled-tool approach.
 
-Current safety rules include:
+Current rules include:
 
 - No unrestricted shell execution
-- No arbitrary PowerShell or terminal execution
+- No arbitrary PowerShell execution
+- No arbitrary Command Prompt execution
 - File access restricted to the approved `data/` folder
 - Application launching restricted by an allowlist
-- Safe arithmetic parsing instead of unrestricted `eval()`
-- EV should only report an action as completed after the real tool succeeds
-- File contents are treated as data, not trusted system instructions
-- API keys remain in `.env`
-
-The tool system should be expanded gradually rather than giving the assistant unrestricted computer control.
+- Safe AST arithmetic instead of unrestricted `eval()`
+- Planner actions restricted by an allowlist
+- Planner arguments validated before execution
+- Executor validates plans again before running actions
+- Unsupported plans execute nothing
+- Planner preview text is never treated as an executable tool call
+- EV should only report successful tool actions after the real tool succeeds
+- File contents are treated as untrusted data
+- API keys stay in `.env`
 
 ---
 
 # Version History
 
 ## v0.1
-
 - Initial NVIDIA NIM conversational assistant
 - EV personality/system prompt
 
 ## v0.2
-
 - Persistent conversation memory
 
 ## v0.3
-
 - Structured long-term memory
 - `/remember`
 - `/memories`
 - `/forget`
 
 ## v0.4
-
 - Microphone input
 - Faster Whisper speech-to-text
 
 ## v0.5
-
 - Optional text-to-speech voice output
 
 ## v0.6
-
 - Safe local file access
 - Approved `data/` folder
 - Natural-language file routing
 - File questions and summarization
 
 ## v0.7
-
 - Approved PC tool system
 - Current time/date tools
 - Approved application launching
@@ -562,30 +569,46 @@ The tool system should be expanded gradually rather than giving the assistant un
 - Notepad typing
 - AI-generated Notepad writing
 
+## v0.8
+- Structured safe task planner
+- `/plan` preview command
+- Validated safe plan executor
+- `/run-plan` execution command
+- Strict planner action allowlist
+- Strict planner argument schemas
+- Unsupported-action rejection
+- Generated-text task pipeline
+- Multi-step Notepad task execution
+- Planner preview syntax guard
+- Improved Notepad typing reliability
+
 ---
 
 # Roadmap
 
-## EV v0.8
+## EV v0.9
 
-Planned areas:
+Possible next areas:
 
-- Smarter task planning
-- Better multi-step action execution
-- Improved memory usage during actions
-- Safe file creation and saving
-- More natural tool selection
-- Action history and clearer execution results
+- Persistent task/action history
+- Better planner consistency
+- More reusable multi-step actions
+- Safe file creation
+- Safe file writing and saving
+- Better planner use of structured memory
+- More detailed execution reports
+- Modular tool registry
+- Refactoring the large `ev.py` application loop
 
 ## Future Ideas
 
 - PDF/document reading
-- Larger-file search and chunking
-- More approved desktop tools
+- Larger-file chunking and search
+- Additional approved desktop tools
 - Vision and screen understanding
 - Browser/web tools
 - Scheduled automations
-- Local/offline model support
+- Local/offline AI model support
 - Personal knowledge base
 
 ---
@@ -594,4 +617,4 @@ Planned areas:
 
 **Fiham Mohammed**
 
-EV Assistant is being developed step-by-step as a personal AI assistant with memory, voice, safe file access, and controlled computer tools.
+EV Assistant is being developed step-by-step from a simple AI chatbot into a memory-aware, voice-enabled, tool-using personal assistant with controlled and validated computer actions.
