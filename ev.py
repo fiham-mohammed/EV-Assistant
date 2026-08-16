@@ -24,6 +24,16 @@ from pc_tools import (
     open_notepad_and_type,
 )
 
+from planner import (
+    create_plan,
+    format_plan,
+)
+
+from executor import (
+    execute_plan,
+    format_execution_report,
+)
+
 from memory import (
     initialize_memory,
     save_message,
@@ -41,7 +51,7 @@ from memory import (
 # =====================================================
 
 EV_CREATOR = "Fiham"
-EV_VERSION = "0.7"
+EV_VERSION = "0.8"
 
 # Voice safety / convenience limits
 MAX_FILE_SPEAK_CHARS = 1500
@@ -137,6 +147,8 @@ Current capabilities:
 - generate useful text with NVIDIA and write it into approved Notepad
 - perform safe arithmetic calculations
 - handle supported compound requests containing more than one approved tool action
+- preview validated safe task plans before execution
+- execute validated approved task plans only through the safe plan executor
 
 File access rules:
 - you CAN access approved local files through EV's real file tools
@@ -157,12 +169,16 @@ PC tool rules:
 - you CAN perform arithmetic using EV's safe calculator tool
 - you CAN generate explanatory or writing content and place it into approved Notepad
 - literal Notepad typing and AI-generated Notepad writing are separate behaviors
+- /plan previews and validates a task plan without executing it
+- /run-plan creates, validates, and executes only approved planner actions
+- planner preview lines such as open_app -> {...} are display text only and are never evidence that a tool ran
 - never guess tool results when a real tool can provide them
 - never claim an app or folder opened unless the real tool succeeded
 - old conversation claims that EV cannot access the clock or approved apps are outdated
 
 Current limitations:
 - PC actions are limited to explicitly approved tools
+- planner actions execute only through the validated allowlisted executor
 - you cannot execute arbitrary terminal, PowerShell, or shell commands
 - you cannot access files outside the approved data folder
 - you cannot launch applications outside the approved app allowlist
@@ -460,29 +476,73 @@ def is_open_data_request(text):
 
 
 def detect_app_launch_request(text):
+    """
+    Detect real natural-language app launch requests.
+
+    Examples:
+    - Open Notepad
+    - Launch Calculator
+    - Start Notepad
+
+    Planner/debug text such as:
+    - open_app -> {"app": "notepad"}
+
+    should NOT be treated as a real launch command.
+    """
+
     text_lower = text.lower()
 
-    launch_words = (
-        "open",
-        "launch",
-        "start",
+    launch_match = re.search(
+        r"\b(?:open|launch|start)\b",
+        text,
+        flags=re.IGNORECASE,
     )
 
-    if not any(
-        word in text_lower
-        for word in launch_words
-    ):
+    if not launch_match:
         return None
 
     for app_name in APP_ALLOWLIST:
-        if app_name.lower() in text_lower:
+        if re.search(
+            rf"\b{re.escape(app_name.lower())}\b",
+            text_lower,
+        ):
             return app_name
 
-    if "calc" in text_lower:
+    if re.search(
+        r"\bcalc\b",
+        text_lower,
+    ):
         return "calculator"
 
     return None
 
+
+
+def is_planner_preview_text(text):
+    """
+    Detect planner/debug output that should never be executed
+    or passed to the normal AI chat path as if it were a command.
+
+    Examples:
+    - open_app -> {"app": "notepad"}
+    - 1. open_app -> {"app": "notepad"}
+    - get_time
+    - write_notepad -> {"text": "hello"}
+    """
+
+    pattern = re.compile(
+        r"^\s*(?:\d+\.\s*)?"
+        r"(?:get_time|get_date|calculate|open_app|"
+        r"open_data_folder|write_notepad|generate_text)"
+        r"(?:\s*->.*)?\s*$",
+        flags=re.IGNORECASE,
+    )
+
+    return bool(
+        pattern.match(
+            text
+        )
+    )
 
 
 def extract_notepad_text(text):
@@ -908,6 +968,14 @@ print(
     "Intelligent Notepad: ONLINE"
 )
 
+print(
+    "Safe Task Planner: PREVIEW ONLY"
+)
+
+print(
+    "Safe Plan Executor: ONLINE"
+)
+
 print()
 
 print(
@@ -956,6 +1024,14 @@ print(
 
 print(
     "  /open <app>                       Launch approved app"
+)
+
+print(
+    "  /plan <task>                      Preview a safe task plan"
+)
+
+print(
+    "  /run-plan <task>                  Execute a validated safe task plan"
 )
 
 print(
@@ -1626,6 +1702,217 @@ while True:
                 "\nEV: Conversation history and "
                 "long-term memory cleared."
             )
+
+            continue
+
+
+        # =================================================
+        # Safe Task Plan Execution
+        #
+        # Example:
+        # /run-plan Open Notepad and create a short AI study plan
+        #
+        # The command itself is explicit execution intent.
+        # The generated plan is validated again by executor.py
+        # before any approved action is performed.
+        # =================================================
+
+        if user_input.lower().startswith(
+            "/run-plan "
+        ):
+            planner_request = user_input[
+                len("/run-plan "):
+            ].strip()
+
+            if not planner_request:
+                print(
+                    "\nEV: Use:\n"
+                    "/run-plan <task>"
+                )
+                continue
+
+            try:
+                plan = create_plan(
+                    client,
+                    MODEL,
+                    planner_request,
+                )
+
+                formatted_plan = format_plan(
+                    plan
+                )
+
+                print(
+                    "\nEV Plan"
+                )
+
+                print(
+                    "-" * 40
+                )
+
+                print(
+                    formatted_plan
+                )
+
+                if not plan.get(
+                    "steps"
+                ):
+                    answer = (
+                        "The task was not executed because "
+                        "no approved actions are available "
+                        "for this request."
+                    )
+
+                    print_and_speak_tool_result(
+                        answer,
+                        voice_output_enabled,
+                    )
+
+                    continue
+
+                report = execute_plan(
+                    client,
+                    MODEL,
+                    plan,
+                )
+
+                print(
+                    "\nEV Execution"
+                )
+
+                print(
+                    "-" * 40
+                )
+
+                print(
+                    format_execution_report(
+                        report
+                    )
+                )
+
+                answer = (
+                    "Validated task execution completed."
+                )
+
+                if voice_output_enabled:
+                    try:
+                        speak(
+                            answer
+                        )
+                    except Exception as exc:
+                        print(
+                            f"\n[SPEECH ERROR] {exc}"
+                        )
+
+            except ValueError as exc:
+                print(
+                    f"\nEV: Task execution was refused: {exc}"
+                )
+
+            except Exception as exc:
+                print(
+                    f"\n[EXECUTOR ERROR] {exc}"
+                )
+
+            continue
+
+
+        # =================================================
+        # Safe Task Planner Preview
+        #
+        # Example:
+        # /plan Open Notepad and create a short AI study plan
+        #
+        # v0.8 Part 1 only previews and validates the plan.
+        # It does NOT execute planner actions yet.
+        # =================================================
+
+        if user_input.lower().startswith(
+            "/plan "
+        ):
+            planner_request = user_input[
+                len("/plan "):
+            ].strip()
+
+            if not planner_request:
+                print(
+                    "\nEV: Use:\n"
+                    "/plan <task>"
+                )
+                continue
+
+            try:
+                plan = create_plan(
+                    client,
+                    MODEL,
+                    planner_request,
+                )
+
+                formatted_plan = format_plan(
+                    plan
+                )
+
+                print(
+                    "\nEV Plan"
+                )
+
+                print(
+                    "-" * 40
+                )
+
+                print(
+                    formatted_plan
+                )
+
+                if voice_output_enabled:
+                    try:
+                        speak(
+                            "The task plan is ready for review."
+                        )
+                    except Exception as exc:
+                        print(
+                            f"\n[SPEECH ERROR] {exc}"
+                        )
+
+            except ValueError as exc:
+                print(
+                    f"\nEV: Planner rejected the plan: {exc}"
+                )
+
+            except Exception as exc:
+                print(
+                    f"\n[PLANNER ERROR] {exc}"
+                )
+
+            continue
+
+
+        # =================================================
+        # Planner Preview / Debug Syntax Guard
+        #
+        # Planner output is DISPLAY ONLY. Typing a line such as:
+        # open_app -> {"app": "notepad"}
+        # must not execute the tool and must not reach normal AI chat.
+        # =================================================
+
+        if is_planner_preview_text(
+            user_input
+        ):
+            print(
+                "\nEV: That is planner preview text, not an "
+                "executable command. Use an approved command such as "
+                "'Open Notepad' or '/open notepad' to perform the action."
+            )
+
+            if voice_output_enabled:
+                try:
+                    speak(
+                        "That is planner preview text, not an executable command."
+                    )
+                except Exception as exc:
+                    print(
+                        f"\n[SPEECH ERROR] {exc}"
+                    )
 
             continue
 

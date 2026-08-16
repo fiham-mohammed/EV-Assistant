@@ -26,6 +26,11 @@ APP_ALIASES = {
 
 MAX_NOTEPAD_TYPE_CHARS = 5000
 
+# PyAutoGUI reliability settings for Notepad.
+NOTEPAD_KEY_INTERVAL = 0.03
+NOTEPAD_FOCUS_DELAY = 0.5
+NOTEPAD_LINE_BREAK_DELAY = 0.05
+
 
 def get_current_time():
     return datetime.now().strftime("%I:%M %p")
@@ -412,12 +417,16 @@ def type_multiline_text(text):
         if line:
             pyautogui.write(
                 line,
-                interval=0.01,
+                interval=NOTEPAD_KEY_INTERVAL,
             )
 
         if index < len(lines) - 1:
             pyautogui.press(
                 "enter"
+            )
+
+            time.sleep(
+                NOTEPAD_LINE_BREAK_DELAY
             )
 
 
@@ -475,7 +484,7 @@ def open_notepad_and_type(text):
                 window.activate()
 
                 time.sleep(
-                    0.25
+                    NOTEPAD_FOCUS_DELAY
                 )
 
             except Exception:
