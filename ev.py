@@ -34,6 +34,18 @@ from executor import (
     format_execution_report,
 )
 
+from tool_registry import (
+    get_allowed_actions,
+)
+
+from task_history import (
+    initialize_task_history,
+    save_task_history,
+    load_task_history,
+    clear_task_history,
+    format_task_history,
+)
+
 from memory import (
     initialize_memory,
     save_message,
@@ -51,7 +63,7 @@ from memory import (
 # =====================================================
 
 EV_CREATOR = "Fiham"
-EV_VERSION = "0.8"
+EV_VERSION = "0.9"
 
 # Voice safety / convenience limits
 MAX_FILE_SPEAK_CHARS = 1500
@@ -133,6 +145,8 @@ Current capabilities:
 - persistent conversation memory
 - structured long-term memory
 - safe local file access
+- safe creation of new approved .txt and .md files inside EV's data folder
+- safe append-only updates to existing approved .txt and .md files
 - list approved local files
 - read approved .txt and .md files
 - detect approved filenames in normal conversation
@@ -149,11 +163,15 @@ Current capabilities:
 - handle supported compound requests containing more than one approved tool action
 - preview validated safe task plans before execution
 - execute validated approved task plans only through the safe plan executor
+- use a central tool registry as the source of truth for approved planner actions
+- keep persistent local task history for planner previews and validated executions
 
 File access rules:
 - you CAN access approved local files through EV's real file tools
 - approved local files are restricted to EV's data folder
 - you cannot access arbitrary files elsewhere on the computer
+- you can create new .txt and .md files only inside EV's approved data folder through validated tools
+- safe file creation refuses to overwrite an existing file
 - never say that you have no file access at all
 - never claim to have read a file unless the real file tool actually read it
 - /files lists files EV is currently allowed to access
@@ -171,6 +189,7 @@ PC tool rules:
 - literal Notepad typing and AI-generated Notepad writing are separate behaviors
 - /plan previews and validates a task plan without executing it
 - /run-plan creates, validates, and executes only approved planner actions
+- planner and executor action policy comes from EV's central tool registry
 - planner preview lines such as open_app -> {...} are display text only and are never evidence that a tool ran
 - never guess tool results when a real tool can provide them
 - never claim an app or folder opened unless the real tool succeeded
@@ -179,6 +198,7 @@ PC tool rules:
 Current limitations:
 - PC actions are limited to explicitly approved tools
 - planner actions execute only through the validated allowlisted executor
+- registered planner actions are centrally defined and validated
 - you cannot execute arbitrary terminal, PowerShell, or shell commands
 - you cannot access files outside the approved data folder
 - you cannot launch applications outside the approved app allowlist
@@ -523,6 +543,8 @@ def is_planner_preview_text(text):
     Detect planner/debug output that should never be executed
     or passed to the normal AI chat path as if it were a command.
 
+    Action names come directly from EV's central tool registry.
+
     Examples:
     - open_app -> {"app": "notepad"}
     - 1. open_app -> {"app": "notepad"}
@@ -530,11 +552,17 @@ def is_planner_preview_text(text):
     - write_notepad -> {"text": "hello"}
     """
 
+    action_pattern = "|".join(
+        re.escape(
+            action
+        )
+        for action in get_allowed_actions()
+    )
+
     pattern = re.compile(
-        r"^\s*(?:\d+\.\s*)?"
-        r"(?:get_time|get_date|calculate|open_app|"
-        r"open_data_folder|write_notepad|generate_text)"
-        r"(?:\s*->.*)?\s*$",
+        rf"^\s*(?:\d+\.\s*)?"
+        rf"(?:{action_pattern})"
+        rf"(?:\s*->.*)?\s*$",
         flags=re.IGNORECASE,
     )
 
@@ -898,6 +926,7 @@ def run_natural_pc_tools(
 # =====================================================
 
 initialize_memory()
+initialize_task_history()
 
 previous_messages = load_recent_messages(
     limit=30
@@ -957,6 +986,14 @@ print(
 )
 
 print(
+    "Safe File Creation: ONLINE"
+)
+
+print(
+    "Safe File Append: ONLINE"
+)
+
+print(
     "Approved PC Tools: ONLINE"
 )
 
@@ -974,6 +1011,18 @@ print(
 
 print(
     "Safe Plan Executor: ONLINE"
+)
+
+print(
+    "Central Tool Registry: ONLINE"
+)
+
+print(
+    f"Registered Planner Actions: {len(get_allowed_actions())}"
+)
+
+print(
+    "Persistent Task History: ONLINE"
 )
 
 print()
@@ -1032,6 +1081,14 @@ print(
 
 print(
     "  /run-plan <task>                  Execute a validated safe task plan"
+)
+
+print(
+    "  /history [limit]                  Show persistent task history"
+)
+
+print(
+    "  /history-clear confirm            Clear task history"
 )
 
 print(
@@ -1131,10 +1188,12 @@ while True:
         # Detect Accidental Multiple Slash Commands
         # -------------------------------------------------
 
-        if (
-            user_input.startswith("/")
-            and user_input.count("/") > 1
-        ):
+        slash_commands = re.findall(
+            r"(?<!\S)/[A-Za-z][A-Za-z0-9-]*",
+            user_input,
+        )
+
+        if len(slash_commands) > 1:
 
             print(
                 "\nEV: Please enter one command at a time."
@@ -1525,6 +1584,75 @@ while True:
 
 
         # =================================================
+        # Persistent Task History
+        # =================================================
+
+        if (
+            normalized_input == "/history"
+            or user_input.lower().startswith(
+                "/history "
+            )
+        ):
+            try:
+                history_limit = 20
+
+                if user_input.lower().startswith(
+                    "/history "
+                ):
+                    history_limit = int(
+                        user_input[
+                            len("/history "):
+                        ].strip()
+                    )
+
+                history = load_task_history(
+                    limit=history_limit
+                )
+
+                print(
+                    "\nEV Task History"
+                )
+
+                print(
+                    "-" * 40
+                )
+
+                print(
+                    format_task_history(
+                        history
+                    )
+                )
+
+            except ValueError as exc:
+                print(
+                    f"\nEV: {exc}"
+                )
+
+            except Exception as exc:
+                print(
+                    f"\n[HISTORY ERROR] {exc}"
+                )
+
+            continue
+
+
+        if normalized_input == "/history-clear confirm":
+            try:
+                clear_task_history()
+
+                print(
+                    "\nEV: Task history cleared."
+                )
+
+            except Exception as exc:
+                print(
+                    f"\n[HISTORY ERROR] {exc}"
+                )
+
+            continue
+
+
+        # =================================================
         # Clear Conversation History
         # =================================================
 
@@ -1768,6 +1896,16 @@ while True:
                         voice_output_enabled,
                     )
 
+                    save_task_history(
+                        request=planner_request,
+                        goal=plan.get(
+                            "goal",
+                            "Unsupported request",
+                        ),
+                        status="refused",
+                        actions=[],
+                    )
+
                     continue
 
                 report = execute_plan(
@@ -1790,6 +1928,22 @@ while True:
                     )
                 )
 
+                save_task_history(
+                    request=planner_request,
+                    goal=report.get(
+                        "goal",
+                        plan.get(
+                            "goal",
+                            "Unknown goal",
+                        ),
+                    ),
+                    status="executed",
+                    actions=report.get(
+                        "steps",
+                        [],
+                    ),
+                )
+
                 answer = (
                     "Validated task execution completed."
                 )
@@ -1805,11 +1959,39 @@ while True:
                         )
 
             except ValueError as exc:
+                try:
+                    save_task_history(
+                        request=planner_request,
+                        goal="Task execution refused",
+                        status="refused",
+                        actions=[],
+                        error=str(
+                            exc
+                        ),
+                    )
+
+                except Exception:
+                    pass
+
                 print(
                     f"\nEV: Task execution was refused: {exc}"
                 )
 
             except Exception as exc:
+                try:
+                    save_task_history(
+                        request=planner_request,
+                        goal="Task execution failed",
+                        status="failed",
+                        actions=[],
+                        error=str(
+                            exc
+                        ),
+                    )
+
+                except Exception:
+                    pass
+
                 print(
                     f"\n[EXECUTOR ERROR] {exc}"
                 )
@@ -1823,8 +2005,8 @@ while True:
         # Example:
         # /plan Open Notepad and create a short AI study plan
         #
-        # v0.8 Part 1 only previews and validates the plan.
-        # It does NOT execute planner actions yet.
+        # /plan remains preview-only in v0.9.
+        # Use /run-plan for validated execution.
         # =================================================
 
         if user_input.lower().startswith(
@@ -1862,6 +2044,25 @@ while True:
 
                 print(
                     formatted_plan
+                )
+
+                save_task_history(
+                    request=planner_request,
+                    goal=plan.get(
+                        "goal",
+                        "Unknown goal",
+                    ),
+                    status=(
+                        "previewed"
+                        if plan.get(
+                            "steps"
+                        )
+                        else "refused"
+                    ),
+                    actions=plan.get(
+                        "steps",
+                        [],
+                    ),
                 )
 
                 if voice_output_enabled:
