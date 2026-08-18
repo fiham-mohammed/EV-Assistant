@@ -1,84 +1,34 @@
 import json
+import re
+
+from tool_registry import (
+    MAX_PLAN_STEPS,
+    build_planner_action_reference,
+    get_allowed_actions,
+    normalize_plan_steps,
+    validate_tool_args,
+)
 
 
 # =====================================================
-# EV v0.8 Safe Task Planner
+# EV v0.9 Safe Task Planner
 # =====================================================
 
-MAX_PLAN_STEPS = 8
-MAX_TEXT_ARG_CHARS = 4000
-MAX_EXPRESSION_CHARS = 200
-
-ALLOWED_APPS = {
-    "notepad",
-    "calculator",
-}
-
-ALLOWED_ACTIONS = {
-    "get_time",
-    "get_date",
-    "calculate",
-    "open_app",
-    "open_data_folder",
-    "write_notepad",
-    "generate_text",
-}
+MAX_GOAL_CHARS = 300
 
 
-PLANNER_SYSTEM_PROMPT = """
+# =====================================================
+# Planner Prompt
+# =====================================================
+
+PLANNER_SYSTEM_PROMPT = f"""
 You are EV's safe task planner.
 
 Your job is to convert a user's request into a short JSON plan.
 
 You DO NOT execute actions.
 
-Allowed actions:
-
-1. get_time
-   args:
-   {}
-
-2. get_date
-   args:
-   {}
-
-3. calculate
-   args:
-   {
-     "expression": "2+2"
-   }
-
-4. open_app
-   args:
-   {
-     "app": "notepad"
-   }
-
-   Approved apps:
-   - notepad
-   - calculator
-
-5. open_data_folder
-   args:
-   {}
-
-6. generate_text
-   args:
-   {
-     "prompt": "what text should be generated"
-   }
-
-7. write_notepad
-
-   For literal text:
-   {
-     "text": "plain text to type"
-   }
-
-   For text produced by a previous generate_text step:
-   {
-     "source": "generated_text"
-   }
+{build_planner_action_reference()}
 
 Important planning rules:
 
@@ -92,22 +42,53 @@ Important planning rules:
 - Never run terminal commands.
 - Never execute code.
 - Never claim that an action already happened.
-- Only use approved applications.
+- Only use applications approved by EV's tool registry.
 - Keep plans short.
 - Use lowercase action names.
-- Use the exact argument names shown above.
-- If the user's request cannot be completed using ONLY the allowed actions,
+- Use the exact argument names defined by the tool registry.
+- If the user's request cannot be completed using ONLY approved actions,
   return an empty steps list.
 - Do not explain rejected requests outside the JSON.
+
+File append rules:
+
+- append_file appends to an EXISTING approved .txt or .md file.
+- append_file never truncates or overwrites the existing file.
+- Only simple filenames inside EV's approved data folder are allowed.
+- If the user provides literal text to append, use append_file with
+  "filename" and "text" and do NOT add generate_text.
+- If the user asks EV to generate new content to append, first use
+  generate_text, then append_file with "filename" and
+  {{"source": "generated_text"}}.
+- Preserve any filename explicitly written by the user exactly.
+
+File creation rules:
+
+- create_file creates NEW files only inside EV's approved data folder.
+- Only .txt and .md filenames are approved.
+- Never use an absolute path or directory path.
+- Never overwrite an existing file.
+- If the user provides literal content, use create_file with "filename" and "text".
+- If create_file uses literal "text", do NOT add a generate_text step.
+- If the user asks EV to generate content for a file, first use generate_text,
+  then create_file with "filename" and {{"source": "generated_text"}}.
+- Never use {{"text": "generated_text"}} as a placeholder.
+- When consuming generated content, always use {{"source": "generated_text"}}.
+- Do not invent unsupported file extensions.
+- Preserve any filename explicitly written by the user exactly.
+- Never remove ../, directory separators, drive prefixes, or other path syntax
+  to make an unsafe filename appear safe.
+- If an explicit requested filename is unsafe, let validation reject it.
 
 Notepad rules:
 
 - write_notepad already opens/focuses approved Notepad.
 - Do NOT add open_app for Notepad when the plan also uses write_notepad.
 - If the user asks to type literal text, use write_notepad with "text".
+- If write_notepad uses literal "text", do NOT add a generate_text step.
 - If the user asks EV to create, explain, describe, prepare, draft, or write
   new content in Notepad, first use generate_text and then use write_notepad
-  with {"source": "generated_text"}.
+  with {{"source": "generated_text"}}.
 - Never put placeholder phrases such as "generated text",
   "AI study plan text", or "content goes here" in write_notepad.
 - If generate_text is used for Notepad, write_notepad must reference
@@ -115,15 +96,15 @@ Notepad rules:
 
 Return exactly this general structure:
 
-{
+{{
   "goal": "short description of the user's goal",
   "steps": [
-    {
-      "action": "allowed_action_name",
-      "args": {}
-    }
+    {{
+      "action": "approved_action_name",
+      "args": {{}}
+    }}
   ]
-}
+}}
 
 Example: get time
 
@@ -131,15 +112,15 @@ User:
 What time is it?
 
 Response:
-{
+{{
   "goal": "Get the current local time",
   "steps": [
-    {
+    {{
       "action": "get_time",
-      "args": {}
-    }
+      "args": {{}}
+    }}
   ]
-}
+}}
 
 Example: literal Notepad typing
 
@@ -147,17 +128,17 @@ User:
 Open Notepad and type hello world
 
 Response:
-{
+{{
   "goal": "Type hello world in Notepad",
   "steps": [
-    {
+    {{
       "action": "write_notepad",
-      "args": {
+      "args": {{
         "text": "hello world"
-      }
-    }
+      }}
+    }}
   ]
-}
+}}
 
 Example: AI-generated Notepad writing
 
@@ -165,23 +146,92 @@ User:
 Open Notepad and create a short AI study plan
 
 Response:
-{
+{{
   "goal": "Create a short AI study plan in Notepad",
   "steps": [
-    {
+    {{
       "action": "generate_text",
-      "args": {
+      "args": {{
         "prompt": "Create a short practical AI study plan"
-      }
-    },
-    {
+      }}
+    }},
+    {{
       "action": "write_notepad",
-      "args": {
+      "args": {{
         "source": "generated_text"
-      }
-    }
+      }}
+    }}
   ]
-}
+}}
+
+Example: AI-generated file creation
+
+User:
+Create study_plan.txt with a short AI study plan
+
+Response:
+{{
+  "goal": "Create a short AI study plan file",
+  "steps": [
+    {{
+      "action": "generate_text",
+      "args": {{
+        "prompt": "Create a short practical AI study plan"
+      }}
+    }},
+    {{
+      "action": "create_file",
+      "args": {{
+        "filename": "study_plan.txt",
+        "source": "generated_text"
+      }}
+    }}
+  ]
+}}
+
+Example: append literal text
+
+User:
+Append hello to notes.txt
+
+Response:
+{{
+  "goal": "Append hello to notes.txt",
+  "steps": [
+    {{
+      "action": "append_file",
+      "args": {{
+        "filename": "notes.txt",
+        "text": "hello"
+      }}
+    }}
+  ]
+}}
+
+Example: append generated text
+
+User:
+Append a short AI tip to notes.txt
+
+Response:
+{{
+  "goal": "Append a short AI tip to notes.txt",
+  "steps": [
+    {{
+      "action": "generate_text",
+      "args": {{
+        "prompt": "Create a short practical AI tip"
+      }}
+    }},
+    {{
+      "action": "append_file",
+      "args": {{
+        "filename": "notes.txt",
+        "source": "generated_text"
+      }}
+    }}
+  ]
+}}
 
 Example: unsupported request
 
@@ -189,186 +239,47 @@ User:
 Run a PowerShell command
 
 Response:
-{
+{{
   "goal": "Unsupported request",
   "steps": []
-}
+}}
 """.strip()
 
 
-def _require_exact_keys(
-    args,
-    expected_keys,
-    action,
-):
-    actual_keys = set(
-        args.keys()
-    )
+# =====================================================
+# Planner Validation
+# =====================================================
 
-    expected_keys = set(
-        expected_keys
-    )
-
-    if actual_keys != expected_keys:
-        raise ValueError(
-            f"Action '{action}' requires args "
-            f"{sorted(expected_keys)}."
-        )
-
-
-def _require_string(
-    value,
-    field_name,
-    max_chars,
-):
+def _require_goal(value):
     if not isinstance(
         value,
         str,
     ):
         raise ValueError(
-            f"Planner field '{field_name}' "
-            "must be a string."
+            "Planner field 'goal' must be a string."
         )
 
     value = value.strip()
 
     if not value:
         raise ValueError(
-            f"Planner field '{field_name}' "
-            "cannot be empty."
+            "Planner field 'goal' cannot be empty."
         )
 
-    if len(value) > max_chars:
+    if len(value) > MAX_GOAL_CHARS:
         raise ValueError(
-            f"Planner field '{field_name}' "
-            "is too long."
+            "Planner field 'goal' is too long."
         )
 
     return value
 
 
-def validate_step_args(
-    action,
-    args,
-):
-    if not isinstance(
-        args,
-        dict,
-    ):
-        raise ValueError(
-            "Planner step args must be an object."
-        )
-
-    if action in {
-        "get_time",
-        "get_date",
-        "open_data_folder",
-    }:
-        _require_exact_keys(
-            args,
-            set(),
-            action,
-        )
-
-        return
-
-    if action == "calculate":
-        _require_exact_keys(
-            args,
-            {"expression"},
-            action,
-        )
-
-        _require_string(
-            args["expression"],
-            "expression",
-            MAX_EXPRESSION_CHARS,
-        )
-
-        return
-
-    if action == "open_app":
-        _require_exact_keys(
-            args,
-            {"app"},
-            action,
-        )
-
-        app = _require_string(
-            args["app"],
-            "app",
-            50,
-        ).lower()
-
-        if app not in ALLOWED_APPS:
-            approved = ", ".join(
-                sorted(ALLOWED_APPS)
-            )
-
-            raise ValueError(
-                f"Planner app '{app}' is not approved. "
-                f"Approved apps: {approved}"
-            )
-
-        return
-
-    if action == "write_notepad":
-        keys = set(
-            args.keys()
-        )
-
-        if keys == {"text"}:
-            _require_string(
-                args["text"],
-                "text",
-                MAX_TEXT_ARG_CHARS,
-            )
-
-            return
-
-        if keys == {"source"}:
-            source = _require_string(
-                args["source"],
-                "source",
-                50,
-            ).lower()
-
-            if source != "generated_text":
-                raise ValueError(
-                    "write_notepad source must be "
-                    "'generated_text'."
-                )
-
-            return
-
-        raise ValueError(
-            "Action 'write_notepad' requires either "
-            "{'text': ...} or "
-            "{'source': 'generated_text'}."
-        )
-
-    if action == "generate_text":
-        _require_exact_keys(
-            args,
-            {"prompt"},
-            action,
-        )
-
-        _require_string(
-            args["prompt"],
-            "prompt",
-            MAX_TEXT_ARG_CHARS,
-        )
-
-        return
-
-    raise ValueError(
-        f"Planner action '{action}' "
-        "has no argument validator."
-    )
-
-
 def validate_plan(plan):
+    """
+    Validate the planner envelope here, then delegate all
+    tool/step validation to EV's central tool registry.
+    """
+
     if not isinstance(
         plan,
         dict,
@@ -388,13 +299,15 @@ def validate_plan(plan):
             "'goal' and 'steps'."
         )
 
-    goal = _require_string(
-        plan["goal"],
-        "goal",
-        300,
+    goal = _require_goal(
+        plan[
+            "goal"
+        ]
     )
 
-    steps = plan["steps"]
+    steps = plan[
+        "steps"
+    ]
 
     if not isinstance(
         steps,
@@ -410,120 +323,148 @@ def validate_plan(plan):
             "Planner returned too many steps."
         )
 
-    normalized_steps = []
-    generated_text_available = False
-
-    for index, step in enumerate(
-        steps,
-        start=1,
-    ):
-        if not isinstance(
-            step,
-            dict,
-        ):
-            raise ValueError(
-                f"Planner step {index} "
-                "must be an object."
-            )
-
-        if set(step.keys()) != {
-            "action",
-            "args",
-        }:
-            raise ValueError(
-                f"Planner step {index} must contain "
-                "only 'action' and 'args'."
-            )
-
-        action = step["action"]
-
-        if not isinstance(
-            action,
-            str,
-        ):
-            raise ValueError(
-                f"Planner step {index} action "
-                "must be a string."
-            )
-
-        action = (
-            action
-            .strip()
-            .lower()
-        )
-
-        if action not in ALLOWED_ACTIONS:
-            raise ValueError(
-                f"Planner action '{action}' "
-                "is not allowed."
-            )
-
-        args = step["args"]
-
-        validate_step_args(
-            action,
-            args,
-        )
-
-        normalized_args = dict(
-            args
-        )
-
-        if action == "open_app":
-            normalized_args["app"] = (
-                normalized_args["app"]
-                .strip()
-                .lower()
-            )
-
-        if action == "generate_text":
-            generated_text_available = True
-
-        if action == "write_notepad":
-            if "source" in normalized_args:
-                normalized_args["source"] = (
-                    normalized_args["source"]
-                    .strip()
-                    .lower()
-                )
-
-                if not generated_text_available:
-                    raise ValueError(
-                        "write_notepad cannot use "
-                        "'generated_text' before a "
-                        "generate_text step."
-                    )
-
-        normalized_steps.append(
-            {
-                "action": action,
-                "args": normalized_args,
-            }
-        )
-
-    # Canonicalize a harmless planner redundancy:
-    # write_notepad already launches/focuses approved Notepad,
-    # so a separate open_app("notepad") step is unnecessary.
-    has_notepad_write = any(
-        step["action"] == "write_notepad"
-        for step in normalized_steps
+    normalized_steps = normalize_plan_steps(
+        steps
     )
-
-    if has_notepad_write:
-        normalized_steps = [
-            step
-            for step in normalized_steps
-            if not (
-                step["action"] == "open_app"
-                and step["args"].get("app") == "notepad"
-            )
-        ]
 
     return {
         "goal": goal,
         "steps": normalized_steps,
     }
 
+
+# =====================================================
+# Request-to-Plan File Binding
+# =====================================================
+
+_FILE_CREATION_VERBS = (
+    "create",
+    "make",
+    "save",
+    "write",
+)
+
+
+def _extract_explicit_requested_filename(user_request):
+    """
+    Extract a filename explicitly written by the user in
+    a likely file-creation request.
+
+    The exact token is preserved so unsafe path syntax cannot
+    be silently rewritten by the planner before validation.
+    """
+
+    request = str(
+        user_request
+    ).strip()
+
+    request_lower = request.lower()
+
+    has_creation_verb = any(
+        re.search(
+            rf"\b{re.escape(verb)}\b",
+            request_lower,
+        )
+        for verb in _FILE_CREATION_VERBS
+    )
+
+    if not has_creation_verb:
+        return None
+
+    match = re.search(
+        r"(?i)(?<!\w)((?:[a-z]:[\\/])?[^\s\"'<>|?*]+\.[a-z0-9]{1,10})",
+        request,
+    )
+
+    if not match:
+        return None
+
+    filename = (
+        match.group(1)
+        .strip()
+        .rstrip(".,;!?)]}")
+    )
+
+    return filename or None
+
+
+def validate_plan_against_request(
+    plan,
+    user_request,
+):
+    """
+    Bind explicit file-creation requests to the exact filename
+    supplied by the user.
+
+    This prevents an unsafe request such as ../escape.txt from
+    being silently rewritten to escape.txt before validation.
+    """
+
+    explicit_filename = (
+        _extract_explicit_requested_filename(
+            user_request
+        )
+    )
+
+    if not explicit_filename:
+        return plan
+
+    # Validate the exact filename from the user's request
+    # through the central registry policy.
+    validate_tool_args(
+        "create_file",
+        {
+            "filename": explicit_filename,
+            "text": "request-validation-placeholder",
+        },
+    )
+
+    file_write_steps = [
+        step
+        for step in plan.get(
+            "steps",
+            [],
+        )
+        if step.get(
+            "action"
+        ) in {
+            "create_file",
+            "append_file",
+        }
+    ]
+
+    if not file_write_steps:
+        return plan
+
+    for step in file_write_steps:
+        planned_filename = str(
+            step.get(
+                "args",
+                {},
+            ).get(
+                "filename",
+                "",
+            )
+        ).strip()
+
+        if (
+            planned_filename.casefold()
+            != explicit_filename.casefold()
+        ):
+            raise ValueError(
+                "Planner changed the requested filename from "
+                f"'{explicit_filename}' to "
+                f"'{planned_filename}'. "
+                "EV refuses to silently rewrite requested "
+                "file paths or filenames."
+            )
+
+    return plan
+
+
+# =====================================================
+# JSON Parsing
+# =====================================================
 
 def _extract_json_object(text):
     """
@@ -597,6 +538,10 @@ def parse_planner_response(text):
     )
 
 
+# =====================================================
+# NVIDIA Planner Call
+# =====================================================
+
 def create_plan(
     client,
     model,
@@ -640,10 +585,19 @@ def create_plan(
         or ""
     )
 
-    return parse_planner_response(
+    plan = parse_planner_response(
         raw_plan
     )
 
+    return validate_plan_against_request(
+        plan,
+        user_request,
+    )
+
+
+# =====================================================
+# Terminal Formatting
+# =====================================================
 
 def format_plan(plan):
     validated_plan = validate_plan(
@@ -693,18 +647,20 @@ def format_plan(plan):
     )
 
 
+# =====================================================
+# Local Test
+# =====================================================
+
 if __name__ == "__main__":
     print(
-        "EV v0.8 Safe Task Planner"
+        "EV v0.9 Safe Task Planner"
     )
 
     print(
-        "Allowed actions:"
+        "Allowed actions from tool_registry.py:"
     )
 
-    for action in sorted(
-        ALLOWED_ACTIONS
-    ):
+    for action in get_allowed_actions():
         print(
             f"- {action}"
         )
