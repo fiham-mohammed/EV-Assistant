@@ -1,16 +1,16 @@
-# EV Assistant — v0.8.0
+# EV Assistant — v0.9.0
 
 EV is a private personal AI assistant built in Python and powered by NVIDIA's hosted NIM API.
 
-The project started as a simple command-line chatbot and has grown into a memory-aware, voice-enabled assistant with safe local file access, controlled Windows PC tools, intelligent Notepad writing, and a validated multi-step task planning system.
+EV has grown from a simple command-line chatbot into a memory-aware, voice-enabled assistant with safe file access, controlled Windows tools, structured planning, validated execution, persistent task history, and a central tool registry.
 
 ---
 
 # Current Version
 
-## EV v0.8.0 — Safe Task Planner & Validated Executor
+## EV v0.9.0 — Modular Tool Registry, Task History & Safe File Writing
 
-EV v0.8 introduces a structured planning layer between natural-language requests and computer actions.
+EV v0.9 introduces a central tool registry and expands EV's safe local automation capabilities.
 
 Current capabilities include:
 
@@ -21,6 +21,8 @@ Current capabilities include:
 - Optional voice output
 - Safe local file access
 - Natural-language file understanding
+- Safe creation of new `.txt` and `.md` files
+- Safe append-only updates to existing `.txt` and `.md` files
 - Current local time and date tools
 - Approved application launching
 - Safe arithmetic calculator
@@ -29,10 +31,13 @@ Current capabilities include:
 - AI-generated Notepad writing
 - Safe task-plan preview
 - Validated task execution
-- Supported multi-step actions
-- Strict planner action allowlist
-- Planner argument validation
+- Central tool registry
+- Registry-backed planner validation
+- Registry-backed executor dispatch
+- Persistent task execution history
+- Strict filename/path validation
 - Unsupported-action rejection
+- Safe literal/generated-text routing
 
 ---
 
@@ -44,7 +49,7 @@ Current capabilities include:
 - Microphone for voice input
 - Speakers/headphones for voice output
 
-EV's current PC automation tools are designed for Windows.
+EV's current PC automation tools are designed primarily for Windows.
 
 ---
 
@@ -103,34 +108,46 @@ Never commit your real `.env` file or API key to GitHub.
 python ev.py
 ```
 
-A typical EV v0.8 startup screen includes:
+A typical EV v0.9 startup screen includes:
 
 ```text
-EV v0.8
+EV v0.9
 NVIDIA-powered personal AI assistant
 Intelligent Memory: ONLINE
 Voice Input: ONLINE
 Voice Output: AVAILABLE
 Safe File Access: ONLINE
 Natural File Routing: ONLINE
+Safe File Creation: ONLINE
+Safe File Append: ONLINE
 Approved PC Tools: ONLINE
 Safe Calculator: ONLINE
 Intelligent Notepad: ONLINE
 Safe Task Planner: PREVIEW ONLY
 Safe Plan Executor: ONLINE
+Central Tool Registry: ONLINE
+Registered Planner Actions: 9
+Persistent Task History: ONLINE
 ```
 
 ---
 
-# Features
-
-## AI Conversation
+# AI Conversation
 
 EV uses an NVIDIA-hosted language model through an OpenAI-compatible API.
 
-## Persistent Memory
+Example:
 
-EV stores recent conversation history in SQLite so previous conversations can be restored after restarting the application.
+```text
+You: Explain machine learning simply.
+EV: ...
+```
+
+---
+
+# Persistent Conversation Memory
+
+EV stores recent conversation history in SQLite so conversations can be restored after restarting the application.
 
 Clear conversation history:
 
@@ -138,7 +155,11 @@ Clear conversation history:
 /clear-chat
 ```
 
-## Structured Long-Term Memory
+This does not remove structured long-term memory or task history.
+
+---
+
+# Structured Long-Term Memory
 
 Remember something:
 
@@ -158,7 +179,7 @@ Forget one memory:
 /forget identity name
 ```
 
-Clear everything:
+Clear conversation and long-term memory:
 
 ```text
 /clear-all confirm
@@ -168,11 +189,17 @@ Clear everything:
 
 # Voice System
 
-Voice input:
+## Voice Input
+
+Use:
 
 ```text
 /voice
 ```
+
+EV records microphone input and converts speech to text using Faster Whisper.
+
+## Voice Output
 
 Enable spoken responses:
 
@@ -190,9 +217,9 @@ Disable spoken responses:
 
 # Safe File Access
 
-EV does not have unrestricted access to the computer's filesystem.
+EV does not have unrestricted filesystem access.
 
-Local file access is restricted to EV's approved `data/` directory.
+File access is restricted to EV's approved `data/` directory.
 
 Current supported file types:
 
@@ -220,9 +247,93 @@ Explain test.txt
 How many lines does test.txt contain?
 ```
 
-Current file-tool results override older conversation claims about that file.
+Current real file-tool results override older conversation claims about that file.
 
-File contents are treated as data, not trusted system instructions.
+File contents are treated as untrusted data, not trusted system instructions.
+
+---
+
+# Safe File Creation
+
+EV v0.9 can create new `.txt` and `.md` files inside the approved `data/` directory.
+
+Literal content example:
+
+```text
+/run-plan Create notes.txt with hello
+```
+
+Expected plan:
+
+```text
+1. create_file -> {'filename': 'notes.txt', 'text': 'hello'}
+```
+
+Generated content example:
+
+```text
+/run-plan Create ai_notes.txt with a short explanation of AI
+```
+
+Expected plan:
+
+```text
+1. generate_text -> {'prompt': 'Create a short explanation of AI'}
+2. create_file -> {'filename': 'ai_notes.txt', 'source': 'generated_text'}
+```
+
+Safety rules:
+
+- only `.txt` and `.md`
+- only inside `data/`
+- no absolute paths
+- no nested directory paths
+- no `../` traversal
+- no drive prefixes
+- existing files are not overwritten
+
+If a file already exists, `create_file` refuses the operation.
+
+---
+
+# Safe File Append
+
+EV v0.9 can append text to an existing approved `.txt` or `.md` file.
+
+Literal append:
+
+```text
+/run-plan Append goodbye to notes.txt
+```
+
+Expected plan:
+
+```text
+1. append_file -> {'filename': 'notes.txt', 'text': 'goodbye'}
+```
+
+Generated append:
+
+```text
+/run-plan Append a short AI tip to notes.txt
+```
+
+Expected plan:
+
+```text
+1. generate_text -> {'prompt': 'Create a short practical AI tip'}
+2. append_file -> {'filename': 'notes.txt', 'source': 'generated_text'}
+```
+
+Append safety:
+
+- target file must already exist
+- existing content is preserved
+- append never truncates the file
+- approved extensions only
+- approved `data/` directory only
+- unsafe paths are rejected
+- missing files are refused
 
 ---
 
@@ -230,7 +341,7 @@ File contents are treated as data, not trusted system instructions.
 
 EV uses a controlled tool architecture.
 
-Current approved tools include:
+Current approved PC capabilities include:
 
 - Current local time
 - Current local date
@@ -283,6 +394,8 @@ Examples:
 Open Calculator and calculate 2+2
 ```
 
+The calculator applies operator, exponent, and result limits.
+
 ---
 
 # Intelligent Notepad
@@ -307,9 +420,138 @@ EV currently does not automatically save the Notepad document.
 
 ---
 
-# EV v0.8 Safe Task Planner
+# Central Tool Registry
 
-Preview a plan:
+EV v0.9 introduces `tool_registry.py` as the source of truth for planner and executor policy.
+
+The registry defines:
+
+- approved action names
+- approved application names
+- argument schemas
+- approved filename extensions
+- argument length limits
+- action normalization
+- filename validation
+- generated-text dependency rules
+- redundant-step cleanup
+- planner action references
+
+This reduces duplicated policy logic across `planner.py` and `executor.py`.
+
+---
+
+# Registered Planner Actions
+
+EV v0.9 currently has 9 registered actions:
+
+```text
+append_file
+calculate
+create_file
+generate_text
+get_date
+get_time
+open_app
+open_data_folder
+write_notepad
+```
+
+## `get_time`
+
+```text
+args: {}
+```
+
+Gets the real current local time.
+
+## `get_date`
+
+```text
+args: {}
+```
+
+Gets the real current local date.
+
+## `calculate`
+
+```text
+args: {'expression': '25*18'}
+```
+
+Safely evaluates an approved arithmetic expression.
+
+## `open_app`
+
+```text
+args: {'app': 'notepad'}
+```
+
+Launches an application from EV's approved application allowlist.
+
+## `open_data_folder`
+
+```text
+args: {}
+```
+
+Opens EV's approved `data/` folder.
+
+## `generate_text`
+
+```text
+args: {'prompt': 'Create a short explanation of AI'}
+```
+
+Generates plain text for an approved task.
+
+## `write_notepad`
+
+Literal:
+
+```text
+args: {'text': 'hello'}
+```
+
+Generated:
+
+```text
+args: {'source': 'generated_text'}
+```
+
+## `create_file`
+
+Literal:
+
+```text
+args: {'filename': 'notes.txt', 'text': 'hello'}
+```
+
+Generated:
+
+```text
+args: {'filename': 'notes.txt', 'source': 'generated_text'}
+```
+
+## `append_file`
+
+Literal:
+
+```text
+args: {'filename': 'notes.txt', 'text': 'goodbye'}
+```
+
+Generated:
+
+```text
+args: {'filename': 'notes.txt', 'source': 'generated_text'}
+```
+
+---
+
+# Safe Task Planner
+
+Preview a task plan:
 
 ```text
 /plan <task>
@@ -331,22 +573,16 @@ Goal: Create a short AI study plan in Notepad
 2. write_notepad -> {'source': 'generated_text'}
 ```
 
-`/plan` is preview-only and does not execute the actions.
+`/plan` is preview-only and does not execute actions.
 
 ---
 
 # Safe Plan Executor
 
-Execute a validated plan:
+Execute a validated task:
 
 ```text
 /run-plan <task>
-```
-
-Example:
-
-```text
-/run-plan Open Notepad and create a short AI study plan
 ```
 
 Execution flow:
@@ -358,18 +594,26 @@ NVIDIA planner
     ↓
 JSON parser
     ↓
-Action allowlist validation
+Central tool registry
+    ↓
+Action validation
     ↓
 Argument-schema validation
     ↓
 Dependency validation
     ↓
-Safe executor
+Executor handler dispatch
     ↓
-Approved Python tool functions
+Approved Python tool function
 ```
 
-Example execution:
+Example:
+
+```text
+/run-plan Open Notepad and create a short AI study plan
+```
+
+Possible output:
 
 ```text
 EV Plan
@@ -386,34 +630,135 @@ EV Execution
 
 ---
 
-# Planner Safety
+# Registry-Backed Executor
 
-Current allowed planner actions:
+EV v0.9 uses an explicit `ACTION_HANDLERS` dispatch table.
+
+The executor checks that:
+
+- every registered action has a handler
+- no executor handler exists for an unregistered action
+- unknown actions cannot execute
+- every plan is validated before execution
+- handler results are checked before reporting success
+
+No dynamic shell, `eval`, or `exec` dispatch is used.
+
+---
+
+# Persistent Task History
+
+EV v0.9 stores planner/executor history in SQLite.
+
+Task history records compact metadata only:
+
+- request
+- goal
+- status
+- action names
+- error text when relevant
+- timestamp
+
+It does not store generated Notepad/file content in the task-history entry.
+
+Show recent history:
 
 ```text
-get_time
-get_date
-calculate
-open_app
-open_data_folder
-write_notepad
-generate_text
+/history
 ```
 
-Unsupported requests produce an empty plan.
-
-Example:
+Show a limited number of entries:
 
 ```text
-/run-plan Run a PowerShell command
+/history 5
 ```
 
-Expected behavior:
+Clear task history:
 
 ```text
-Goal: Unsupported request
-No approved actions available for this request.
+/history-clear confirm
 ```
+
+Possible statuses:
+
+```text
+PREVIEWED
+EXECUTED
+REFUSED
+FAILED
+```
+
+Task history persists across EV restarts.
+
+---
+
+# Filename Binding Protection
+
+A language model may sometimes try to rewrite an unsafe path into a safe-looking filename.
+
+Example request:
+
+```text
+Create ../escape.txt with hello
+```
+
+A model might try to change that into:
+
+```text
+escape.txt
+```
+
+EV v0.9 binds explicit filenames from the original user request to the validated plan so unsafe path syntax cannot be silently removed.
+
+Unsafe filenames are validated exactly as requested.
+
+Examples that should be rejected by file-writing policy:
+
+```text
+../escape.txt
+C:\temp\notes.txt
+folder/notes.txt
+script.py
+```
+
+---
+
+# Literal vs Generated Content Routing
+
+EV distinguishes literal text from AI-generated content.
+
+Literal request:
+
+```text
+Create notes.txt with hello
+```
+
+Plan:
+
+```text
+1. create_file -> {'filename': 'notes.txt', 'text': 'hello'}
+```
+
+No unnecessary `generate_text` step is executed.
+
+Generated request:
+
+```text
+Create notes.txt with a short explanation of AI
+```
+
+Plan:
+
+```text
+1. generate_text -> {'prompt': 'Create a short explanation of AI'}
+2. create_file -> {'filename': 'notes.txt', 'source': 'generated_text'}
+```
+
+The same cleanup applies to Notepad and append workflows.
+
+---
+
+# Planner Preview Guard
 
 Planner/debug output is display text only.
 
@@ -424,6 +769,8 @@ open_app -> {"app": "notepad"}
 ```
 
 is not treated as an executable command.
+
+The preview guard reads approved action names from the central tool registry instead of using a hardcoded action list.
 
 ---
 
@@ -449,6 +796,9 @@ exit                              Close EV
 /plan <task>                      Preview a safe task plan
 /run-plan <task>                  Execute a validated safe task plan
 
+/history [limit]                  Show persistent task history
+/history-clear confirm            Clear task history
+
 /clear-chat                       Clear conversation history
 
 /remember <category> <key> <value>
@@ -472,38 +822,59 @@ EV-Assistant/
 ├── ev.py
 ├── executor.py
 ├── file_tools.py
+├── file_write_tools.py
 ├── memory.py
 ├── pc_tools.py
 ├── planner.py
 ├── speech.py
+├── task_history.py
+├── tool_registry.py
 ├── voice.py
 └── requirements.txt
 ```
 
-## Main Modules
+## `ev.py`
 
-### `ev.py`
-Main application loop, command routing, conversation handling, memory context, file context, and tool integration.
+Main application loop, command routing, conversation handling, memory context, file context, planner/executor integration, history commands, and startup UI.
 
-### `planner.py`
-Creates and validates structured safe task plans.
+## `tool_registry.py`
 
-### `executor.py`
-Executes only validated approved planner actions.
+Central source of truth for approved actions, schemas, app policy, filename rules, dependencies, and normalization.
 
-### `pc_tools.py`
+## `planner.py`
+
+Creates structured plans, parses model JSON, validates the plan envelope, binds explicit filenames to the original request, and delegates tool validation to the registry.
+
+## `executor.py`
+
+Executes only validated approved actions through an explicit handler dispatch table.
+
+## `task_history.py`
+
+Stores persistent planner/executor history inside EV's SQLite database.
+
+## `file_tools.py`
+
+Restricts file reading to the approved EV `data/` folder.
+
+## `file_write_tools.py`
+
+Handles safe creation and append-only updates for approved `.txt` and `.md` files.
+
+## `pc_tools.py`
+
 Contains approved Windows PC tools such as current time/date, approved app launching, safe calculator, Calculator UI interaction, and Notepad typing.
 
-### `file_tools.py`
-Restricts local file access to the approved EV `data/` folder.
+## `memory.py`
 
-### `memory.py`
 SQLite-backed conversation and structured long-term memory.
 
-### `voice.py`
+## `voice.py`
+
 Microphone recording and Faster Whisper speech-to-text.
 
-### `speech.py`
+## `speech.py`
+
 Optional text-to-speech output.
 
 ---
@@ -517,49 +888,66 @@ Current rules include:
 - No unrestricted shell execution
 - No arbitrary PowerShell execution
 - No arbitrary Command Prompt execution
-- File access restricted to the approved `data/` folder
+- No arbitrary `eval()` or `exec()`
+- File reading restricted to the approved `data/` folder
+- File writing restricted to the approved `data/` folder
+- Safe file creation supports only `.txt` and `.md`
+- New-file creation refuses existing-file overwrite
+- Append only works on existing approved files
+- Unsafe paths and traversal attempts are rejected
+- Explicit user filenames are bound to validated plans
 - Application launching restricted by an allowlist
 - Safe AST arithmetic instead of unrestricted `eval()`
-- Planner actions restricted by an allowlist
+- Planner actions restricted by the central tool registry
 - Planner arguments validated before execution
-- Executor validates plans again before running actions
+- Generated-text dependencies are validated
+- Executor handler alignment is checked
 - Unsupported plans execute nothing
-- Planner preview text is never treated as an executable tool call
-- EV should only report successful tool actions after the real tool succeeds
+- Planner preview text is never treated as a tool call
 - File contents are treated as untrusted data
 - API keys stay in `.env`
+- EV should only report successful tool actions after the real tool succeeds
+
+The tool system should continue to expand gradually instead of giving the AI unrestricted computer control.
 
 ---
 
 # Version History
 
 ## v0.1
+
 - Initial NVIDIA NIM conversational assistant
 - EV personality/system prompt
 
 ## v0.2
+
 - Persistent conversation memory
 
 ## v0.3
+
 - Structured long-term memory
 - `/remember`
 - `/memories`
 - `/forget`
 
 ## v0.4
+
 - Microphone input
 - Faster Whisper speech-to-text
 
 ## v0.5
+
 - Optional text-to-speech voice output
 
 ## v0.6
+
 - Safe local file access
 - Approved `data/` folder
 - Natural-language file routing
 - File questions and summarization
 
 ## v0.7
+
 - Approved PC tool system
 - Current time/date tools
 - Approved application launching
@@ -570,6 +958,7 @@ Current rules include:
 - AI-generated Notepad writing
 
 ## v0.8
+
 - Structured safe task planner
 - `/plan` preview command
 - Validated safe plan executor
@@ -578,27 +967,46 @@ Current rules include:
 - Strict planner argument schemas
 - Unsupported-action rejection
 - Generated-text task pipeline
-- Multi-step Notepad task execution
+- Multi-step Notepad execution
 - Planner preview syntax guard
 - Improved Notepad typing reliability
+
+## v0.9
+
+- Central `tool_registry.py`
+- Registry-backed planner validation
+- Registry-backed executor dispatch
+- 9 registered planner actions
+- Persistent task execution history
+- `/history`
+- `/history-clear confirm`
+- Safe `.txt` and `.md` file creation
+- Safe append-only file updates
+- Existing-file overwrite protection
+- Missing append-target rejection
+- Filename/path validation
+- Explicit request-to-plan filename binding
+- Path traversal rejection
+- Literal/generated content routing cleanup
+- Improved planner normalization
 
 ---
 
 # Roadmap
 
-## EV v0.9
+## EV v0.10
 
 Possible next areas:
 
-- Persistent task/action history
-- Better planner consistency
-- More reusable multi-step actions
-- Safe file creation
-- Safe file writing and saving
-- Better planner use of structured memory
-- More detailed execution reports
-- Modular tool registry
-- Refactoring the large `ev.py` application loop
+- Refactor the large `ev.py` main loop into smaller command/router modules
+- Add automated tests for planner/registry/executor behavior
+- Improve tool metadata and capability introspection
+- Add task-history filtering
+- Improve execution reports
+- Improve multi-step data flow between tools
+- Better planner use of structured long-term memory
+- Consider safe file replacement only with explicit confirmation
+- Consider safe file deletion only with explicit confirmation
 
 ## Future Ideas
 
@@ -610,6 +1018,7 @@ Possible next areas:
 - Scheduled automations
 - Local/offline AI model support
 - Personal knowledge base
+- Smart-device integrations
 
 ---
 
